@@ -146,8 +146,8 @@ function checkBuildNecessary() {
   local currentCommit
   currentCommit=$(git rev-parse --short HEAD)
   POTENTIAL_ASSETS=()
-    
-  if [[ -n "$MAGISK_PREINIT_DEVICE" ]]; then 
+
+  if [[ -n "$MAGISK_PREINIT_DEVICE" ]]; then
     # e.g. oriole-2023121200-magisk-v26.4-4647f74-dirty.zip
     POTENTIAL_ASSETS['magisk']="${DEVICE_ID}-${OTA_VERSION}-${currentCommit}-magisk-${MAGISK_VERSION}$(createAssetSuffix).zip"
 
@@ -157,10 +157,10 @@ function checkBuildNecessary() {
     else
       printGreen "SKIP_PIXINCREATE set, not creating pixincreate OTA"
     fi
-  else 
+  else
     printGreen "MAGISK_PREINIT_DEVICE not set for device, not creating magisk OTA"
   fi
-  
+
   if [[ "$SKIP_ROOTLESS" != 'true' ]]; then
     POTENTIAL_ASSETS['rootless']="${DEVICE_ID}-${OTA_VERSION}-${currentCommit}-rootless$(createAssetSuffix).zip"
   else
@@ -190,16 +190,16 @@ function checkBuildNecessary() {
   if [[ -n ${response} ]]; then
     RELEASE_ID=$(echo "${response}" | jq -r '.id')
     print "Release ${OTA_VERSION} exists. ID=$RELEASE_ID"
-    
+
     for flavor in "${!POTENTIAL_ASSETS[@]}"; do
       local selectedAsset POTENTIAL_ASSET_NAME="${POTENTIAL_ASSETS[$flavor]}"
       print "Checking if asset exists ${POTENTIAL_ASSET_NAME}"
-      
+
       # Save some storage by not building and uploading every new commit as asset
       selectedAsset=$(echo "${response}" | jq -r --arg assetPrefix "${DEVICE_ID}-${OTA_VERSION}" \
         '.assets[] | select(.name | startswith($assetPrefix)) | .name' \
           | grep "${flavor}" || true)
-  
+
       if [[ -n "${selectedAsset}" ]] && [[ "$FORCE_BUILD" != 'true' ]] && [[ "$UPLOAD_TEST_OTA" != 'true' ]]; then
         printGreen "Skipping build of asset name '$POTENTIAL_ASSET_NAME'. Because this flavor already is released with a different commit." \
           "Set FORCE_BUILD or UPLOAD_TEST_OTA to force. Assets found on release: ${selectedAsset//$'\n'/ }"
@@ -208,7 +208,7 @@ function checkBuildNecessary() {
         print "No asset found with name '$POTENTIAL_ASSET_NAME'."
       fi
     done
-    
+
     if [ "${#POTENTIAL_ASSETS[@]}" -eq 0 ]; then
       printGreen "All potential assets already exist. Exiting"
       exit 0
@@ -233,7 +233,7 @@ function createAssetSuffix() {
   local suffix=''
   if [[ "${SKIP_MODULES}" == 'true' ]]; then
     suffix+='-minimal'
-  fi 
+  fi
   if [[ "${UPLOAD_TEST_OTA}" == 'true' ]]; then
     suffix+='-test'
   fi
@@ -290,21 +290,21 @@ function downloadAndVerifyFromChenxiaolong() {
   local repo="$1"
   local version="$2"
   local artifact="${3:-$1}" # optional: If not set, use repo name
-  
+
   local url="https://github.com/chenxiaolong/${repo}/releases/download/v${version}/${artifact}-${version}-x86_64-unknown-linux-gnu.zip"
   local downloadedZipFile
   downloadedZipFile="$(mktemp)"
-  
+
   mkdir -p .tmp
 
   if ! ls ".tmp/${artifact}" >/dev/null 2>&1; then
     curl --fail -sL "${url}" > "${downloadedZipFile}"
     curl --fail -sL "${url}.sig" > "${downloadedZipFile}.sig"
-    
+
     # Validate against author's public key
     ssh-keygen -Y verify -I chenxiaolong -f <(echo "chenxiaolong $CHENXIAOLONG_PK") -n file \
       -s "${downloadedZipFile}.sig" < "${downloadedZipFile}"
-    
+
     echo N | unzip "${downloadedZipFile}" -d .tmp
     rm "${downloadedZipFile}"*
     chmod +x ".tmp/${artifact}" # e.g. .tmp/custota-tool
@@ -370,7 +370,7 @@ function patchOTAs() {
 
       # We need to add .tmp to PATH, but we can't use $PATH: because this would be the PATH of the host not the container
       # Python image is designed to run as root, so chown the files it creates back at the end
-      # ... room for improvement 😐️
+      # ... room for improvement ?????
       # shellcheck disable=SC2046
       docker run --rm -i $(tty &>/dev/null && echo '-t') \
     -v "$PWD:/app" \
@@ -386,7 +386,7 @@ function patchOTAs() {
 
       printGreen "Finished patching file ${targetFile}"
     fi
-    
+
   done
 }
 
@@ -413,7 +413,7 @@ function base642key() {
 function releaseOta() {
 
   createReleaseIfNecessary
-  
+
   for flavor in "${!POTENTIAL_ASSETS[@]}"; do
     local assetName="${POTENTIAL_ASSETS[$flavor]}"
     uploadFile ".tmp/$assetName" "$assetName" "application/zip"
@@ -423,7 +423,7 @@ function releaseOta() {
 function createReleaseIfNecessary() {
   checkMandatoryVariable 'GITHUB_REPO' 'GITHUB_TOKEN'
 
-  local response changelog src_repo current_commit 
+  local response changelog src_repo current_commit
 
   if [[ -z "$RELEASE_ID" ]]; then
     src_repo=$(extractGithubRepo "$(git config --get remote.origin.url)")
@@ -440,12 +440,12 @@ function createReleaseIfNecessary() {
         "https://api.github.com/repos/$GITHUB_REPO/releases/generate-notes" | jq -r '.body // empty')
       # Replace \n by \\n to keep them as chars
       changelog="Update to [GrapheneOS ${OTA_VERSION}](https://grapheneos.org/releases#${OTA_VERSION_ANCHOR}).\n\n$(echo "${changelog}" | sed ':a;N;$!ba;s/\n/\\n/g')"
-    else 
-      # When pushing to different repo's GH pages, generating notes does not make too much sense. Refer to the used repo's "version" instead. 
+    else
+      # When pushing to different repo's GH pages, generating notes does not make too much sense. Refer to the used repo's "version" instead.
       current_commit=$(git rev-parse --short HEAD)
       changelog="Update to [GrapheneOS ${OTA_VERSION}](https://grapheneos.org/releases#${OTA_VERSION_ANCHOR}).\n\nRelease created using ${src_repo}@${current_commit}. See [Changelog](https://github.com/${src_repo}/blob/${current_commit}/README.md#notable-changelog)."
     fi
-    
+
     response=$(curl -sL -X POST -H "Authorization: token $GITHUB_TOKEN" \
       -d "{
               \"tag_name\": \"$OTA_VERSION\",
@@ -496,29 +496,29 @@ function createOtaServerData() {
   for flavor in "${!POTENTIAL_ASSETS[@]}"; do
     local POTENTIAL_ASSET_NAME="${POTENTIAL_ASSETS[$flavor]}"
     local targetFile=".tmp/${POTENTIAL_ASSET_NAME}"
-    
+
     local args=()
-  
+
     args+=("--input" "${targetFile}")
     args+=("--output" "${targetFile}.csig")
     args+=("--key" "$KEY_OTA")
     args+=("--cert" "$CERT_OTA")
-  
+
     # If env vars not set, passphrases will be queried interactively
     if [ -v PASSPHRASE_OTA ]; then
       args+=("--passphrase-env-var" "PASSPHRASE_OTA")
     fi
-  
+
     .tmp/custota-tool gen-csig "${args[@]}"
-  
+
     mkdir -p ".tmp/${flavor}"
-    
+
     local args=()
     args+=("--file" ".tmp/${flavor}/${DEVICE_ID}.json")
     # e.g. https://github.com/schnatterer/rooted-graphene/releases/download/2023121200-v26.4-e54c67f/oriole-ota_update-2023121200.zip
     # Instead of constructing the location we could also parse it from the upload response
     args+=("--location" "https://github.com/$GITHUB_REPO/releases/download/$OTA_VERSION/$POTENTIAL_ASSET_NAME")
-  
+
     .tmp/custota-tool gen-update-info "${args[@]}"
   done
 }
@@ -533,7 +533,7 @@ function uploadOtaServerData() {
   local current_branch current_commit base_dir src_repo
   current_commit=$(git rev-parse --short HEAD)
   folderPrefix=''
-  
+
   if [[ "${UPLOAD_TEST_OTA}" == 'true' ]]; then
     folderPrefix='test/'
   fi
@@ -544,16 +544,16 @@ function uploadOtaServerData() {
     if [[ -n "${PAGES_REPO_FOLDER}" ]]; then
       cd "${PAGES_REPO_FOLDER}"
     fi
-    
+
     current_branch=$(git rev-parse --abbrev-ref HEAD)
     git checkout gh-pages
-    
+
     for flavor in "${!POTENTIAL_ASSETS[@]}"; do
       local POTENTIAL_ASSET_NAME="${POTENTIAL_ASSETS[$flavor]}"
       local targetFile="${folderPrefix}${flavor}/${DEVICE_ID}.json"
-  
+
       uploadFile "${base_dir}/.tmp/${POTENTIAL_ASSET_NAME}.csig" "$POTENTIAL_ASSET_NAME.csig" "application/octet-stream"
-      
+
       mkdir -p "${folderPrefix}${flavor}"
       # update only, if current $DEVICE_ID.json does not contain $OTA_VERSION
       # We don't want to trigger users to upgrade on new commits from this repo or new magisk versions
@@ -567,16 +567,16 @@ function uploadOtaServerData() {
         printGreen "Skipping update of OTA server, because SKIP_OTA_SERVER_UPLOAD is true."
       fi
     done
-    
+
     if ! git diff-index --quiet HEAD; then
       # Commit and push only when there are changes
-      git config user.name "GitHub Actions" && git config user.email "actions@github.com"
+      git config user.name "github-actions[bot]" && git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
       git commit \
           --message "Update device ${DEVICE_ID} basing on ${src_repo}@${current_commit}" \
-    
+
       gitPushWithRetries
     fi
-  
+
     # Switch back to the original branch
     git checkout "$current_branch"
   )
@@ -612,7 +612,7 @@ function gitPushWithRetries() {
       sleep 2
     fi
   done
-  
+
   if [ $count -eq $GIT_PUSH_RETRIES ]; then
     printRed "Failed to push to gh-pages after $GIT_PUSH_RETRIES attempts."
     exit 1
@@ -638,3 +638,4 @@ function printRed() {
       print "$@"
   fi
 }
+
