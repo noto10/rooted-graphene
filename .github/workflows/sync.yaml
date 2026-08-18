@@ -1,7 +1,7 @@
 name: Auto-Sync Upstream
 on:
   schedule:
-    - cron: '0 5 * * *' # Runs daily at 5 AM UTC (1 hour before OTA sync)
+    - cron: '*/15 * * * *' # Runs every 15 mins (1 hour before OTA sync)
   workflow_dispatch:    # Allows manual trigger from the Actions tab
 
 jobs:
